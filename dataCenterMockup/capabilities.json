@@ -1,0 +1,55 @@
+{
+  "privileges": [
+    { "name": "ExportContent", "essential": false },
+    { "name": "LocalStorage", "essential": false }
+  ],
+
+  "dataRoles": [
+    { "displayName": "Square Footage", "name": "sqft", "kind": "Measure" },
+    { "displayName": "Stories", "name": "stories", "kind": "Measure" },
+    { "displayName": "Building Count", "name": "buildingCount", "kind": "Measure" },
+    { "displayName": "Acreage", "name": "acreage", "kind": "Measure" }
+  ],
+
+  "dataViewMappings": [
+    {
+      "categorical": {
+        "values": {
+          "bind": {
+            "to": "measure"
+          }
+        }
+      }
+    }
+  ],
+
+  "objects": {
+    "building": {
+      "displayName": "Building",
+      "properties": {
+        "fillColor": {
+          "displayName": "Building Color",
+          "type": { "fill": { "solid": { "color": true } } }
+        },
+        "outlineColor": {
+          "displayName": "Outline Color",
+          "type": { "fill": { "solid": { "color": true } } }
+        },
+        "outlineWidth": {
+          "displayName": "Outline Width",
+          "type": { "numeric": true }
+        },
+        "aspectRatio": {
+          "displayName": "Footprint Aspect Ratio",
+          "type": { "numeric": true }
+        },
+        "showLabels": {
+          "displayName": "Show Labels",
+          "type": { "bool": true }
+        }
+      }
+    }
+  },
+
+  "supportsHighlight": false
+}
