@@ -5,9 +5,9 @@ import VisualConstructorOptions = powerbiVisualsApi.extensibility.visual.VisualC
 import DialogConstructorOptions = powerbiVisualsApi.extensibility.visual.DialogConstructorOptions;
 var powerbiKey: any = "powerbi";
 var powerbi: any = window[powerbiKey];
-var DataCenterViz: IVisualPlugin = {
-    name: 'DataCenterViz',
-    displayName: 'DataCenterViz',
+var DataCenterMockupC9F1A3C5C3B64B1FA8E0F1C2A0B1C2D3: IVisualPlugin = {
+    name: 'DataCenterMockupC9F1A3C5C3B64B1FA8E0F1C2A0B1C2D3',
+    displayName: 'Data Center Mockup',
     class: 'Visual',
     apiVersion: '5.3.0',
     create: (options?: VisualConstructorOptions) => {
@@ -27,6 +27,6 @@ var DataCenterViz: IVisualPlugin = {
 if (typeof powerbi !== "undefined") {
     powerbi.visuals = powerbi.visuals || {};
     powerbi.visuals.plugins = powerbi.visuals.plugins || {};
-    powerbi.visuals.plugins["DataCenterViz"] = DataCenterViz;
+    powerbi.visuals.plugins["DataCenterMockupC9F1A3C5C3B64B1FA8E0F1C2A0B1C2D3"] = DataCenterMockupC9F1A3C5C3B64B1FA8E0F1C2A0B1C2D3;
 }
-export default DataCenterViz;
+export default DataCenterMockupC9F1A3C5C3B64B1FA8E0F1C2A0B1C2D3;

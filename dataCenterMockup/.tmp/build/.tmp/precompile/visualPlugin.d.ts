@@ -1,4 +1,4 @@
 import powerbiVisualsApi from "powerbi-visuals-api";
 import IVisualPlugin = powerbiVisualsApi.visuals.plugins.IVisualPlugin;
-declare var DataCenterViz: IVisualPlugin;
-export default DataCenterViz;
+declare var DataCenterMockupC9F1A3C5C3B64B1FA8E0F1C2A0B1C2D3: IVisualPlugin;
+export default DataCenterMockupC9F1A3C5C3B64B1FA8E0F1C2A0B1C2D3;

@@ -1,26 +1,22 @@
 {
-    "visual": {
-        "name": "DataCenterViz",
-        "displayName": "DataCenterViz",
-        "guid": "DataCenterViz",
-        "visualClassName": "Visual",
-        "version": "1.0.0.0",
-        "description": "Custom visual for estimating data center project logistics needs.",
-        "supportUrl": "flyingmouselabs.com",
-        "gitHubUrl": ""
-    },
-    "apiVersion": "5.3.0",
-    "author": {
-        "name": "Kody Klein",
-        "email": "kodyjonklein@gmail.com"
-    },
-    "assets": {
-        "icon": "assets/icon.png"
-    },
-    "externalJS": null,
-    "style": "style/visual.less",
-    "capabilities": "capabilities.json",
-    "dependencies": null,
-    "stringResources": [],
-    "version": "1.0.0.0"
+  "visual": {
+    "name": "datacenter-mockup",
+    "displayName": "Data Center Mockup",
+    "guid": "DataCenterMockupC9F1A3C5C3B64B1FA8E0F1C2A0B1C2D3",
+    "visualClassName": "Visual",
+    "version": "1.0.0.0",
+    "description": "Exec-friendly data center campus mockup with scenario modes and logistics estimates.",
+    "supportUrl": "https://flyingmouselabs.com",
+    "gitHubUrl": ""
+  },
+  "apiVersion": "5.3.0",
+  "author": {
+    "name": "Kody Klein",
+    "email": "kody@flyingmouselabs.com"
+  },
+  "assets": {
+    "icon": "assets/icon.png"
+  },
+  "style": "style/visual.less",
+  "capabilities": "capabilities.json"
 }
