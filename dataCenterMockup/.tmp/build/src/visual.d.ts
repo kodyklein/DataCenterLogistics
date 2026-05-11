@@ -14,14 +14,11 @@ export declare class Visual implements IVisual {
     private matchBuildingParam;
     private computeScenario;
     private render;
-    private expandGlobalBuildings;
-    private drawLandscaping;
+    private expandGlobal;
+    private drawGrassPlane;
+    private drawHedges;
     private renderFootprintStack;
     private renderIsometricDatacenter;
-    private drawIsometricWindows;
-    private drawVentSlitsOnQuad;
-    private quadStripPolygon;
-    private quadWindowPolygon;
     private drawFooter;
     private poly;
     private drawText;
