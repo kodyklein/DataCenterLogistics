@@ -15,13 +15,15 @@ export declare class Visual implements IVisual {
     private computeScenario;
     private render;
     private expandGlobal;
-    private drawGrassPlane;
-    private drawHedges;
+    private drawGrassOnly;
     private renderFootprintStack;
     private renderIsometricDatacenter;
+    private drawTallDoubleDoor;
+    private drawIsometricWindows;
+    private drawHedges4;
     private drawFooter;
+    private drawTextBlock;
     private poly;
-    private drawText;
     private renderMessage;
     private exportSnapshot;
     private tint;

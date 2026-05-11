@@ -39,10 +39,9 @@
           "type": { "numeric": true }
         },
         "showLabels": {
-          "displayName": "Show Labels",
+          "displayName": "Show Top Labels",
           "type": { "bool": true }
         },
-
         "renderMode": {
           "displayName": "Render Mode",
           "type": {
@@ -52,21 +51,93 @@
             ]
           }
         },
-
         "mechEvery": {
           "displayName": "Mechanical Floor Every N Stories",
           "type": { "numeric": true }
         },
-
         "showLandscaping": {
           "displayName": "Show Landscaping",
           "type": { "bool": true }
         },
-
         "windowDensity": {
           "displayName": "Window Density",
           "type": { "numeric": true }
         }
+      }
+    },
+
+    "text": {
+      "displayName": "Text Formatting",
+      "properties": {
+        "hdr1_size": { "displayName": "Header 1 - Font Size", "type": { "numeric": true } },
+        "hdr1_bold": { "displayName": "Header 1 - Bold", "type": { "bool": true } },
+        "hdr1_italic": { "displayName": "Header 1 - Italic", "type": { "bool": true } },
+        "hdr1_underline": { "displayName": "Header 1 - Underline", "type": { "bool": true } },
+        "hdr1_align": {
+          "displayName": "Header 1 - Alignment",
+          "type": { "enumeration": [
+            { "value": "left", "displayName": "Left" },
+            { "value": "center", "displayName": "Center" },
+            { "value": "right", "displayName": "Right" }
+          ] }
+        },
+        "hdr1_wrap": { "displayName": "Header 1 - Wrap", "type": { "bool": true } },
+
+        "sub1_size": { "displayName": "Subheader 1 - Font Size", "type": { "numeric": true } },
+        "sub1_bold": { "displayName": "Subheader 1 - Bold", "type": { "bool": true } },
+        "sub1_italic": { "displayName": "Subheader 1 - Italic", "type": { "bool": true } },
+        "sub1_underline": { "displayName": "Subheader 1 - Underline", "type": { "bool": true } },
+        "sub1_align": {
+          "displayName": "Subheader 1 - Alignment",
+          "type": { "enumeration": [
+            { "value": "left", "displayName": "Left" },
+            { "value": "center", "displayName": "Center" },
+            { "value": "right", "displayName": "Right" }
+          ] }
+        },
+        "sub1_wrap": { "displayName": "Subheader 1 - Wrap", "type": { "bool": true } },
+
+        "hdr2_size": { "displayName": "Header 2 - Font Size", "type": { "numeric": true } },
+        "hdr2_bold": { "displayName": "Header 2 - Bold", "type": { "bool": true } },
+        "hdr2_italic": { "displayName": "Header 2 - Italic", "type": { "bool": true } },
+        "hdr2_underline": { "displayName": "Header 2 - Underline", "type": { "bool": true } },
+        "hdr2_align": {
+          "displayName": "Header 2 - Alignment",
+          "type": { "enumeration": [
+            { "value": "left", "displayName": "Left" },
+            { "value": "center", "displayName": "Center" },
+            { "value": "right", "displayName": "Right" }
+          ] }
+        },
+        "hdr2_wrap": { "displayName": "Header 2 - Wrap", "type": { "bool": true } },
+
+        "body_size": { "displayName": "Body - Font Size", "type": { "numeric": true } },
+        "body_bold": { "displayName": "Body - Bold", "type": { "bool": true } },
+        "body_italic": { "displayName": "Body - Italic", "type": { "bool": true } },
+        "body_underline": { "displayName": "Body - Underline", "type": { "bool": true } },
+        "body_align": {
+          "displayName": "Body - Alignment",
+          "type": { "enumeration": [
+            { "value": "left", "displayName": "Left" },
+            { "value": "center", "displayName": "Center" },
+            { "value": "right", "displayName": "Right" }
+          ] }
+        },
+        "body_wrap": { "displayName": "Body - Wrap", "type": { "bool": true } },
+
+        "warn_size": { "displayName": "Warning - Font Size", "type": { "numeric": true } },
+        "warn_bold": { "displayName": "Warning - Bold", "type": { "bool": true } },
+        "warn_italic": { "displayName": "Warning - Italic", "type": { "bool": true } },
+        "warn_underline": { "displayName": "Warning - Underline", "type": { "bool": true } },
+        "warn_align": {
+          "displayName": "Warning - Alignment",
+          "type": { "enumeration": [
+            { "value": "left", "displayName": "Left" },
+            { "value": "center", "displayName": "Center" },
+            { "value": "right", "displayName": "Right" }
+          ] }
+        },
+        "warn_wrap": { "displayName": "Warning - Wrap", "type": { "bool": true } }
       }
     }
   },

@@ -9,33 +9,31 @@ import IDownloadService = powerbi.extensibility.IDownloadService;
 import { getSettings } from "./settings";
 
 type BuildingSpec = { sqft: number; stories: number };
+type Pt = { x: number; y: number };
 
 type Inputs = {
   mode: number;                 // 0=Global, 1=Individual
   acreage: number;
 
-  // Global mode controls
-  totalSqft: number;            // total sqft across all buildings
-  storiesGlobal: number;        // stories per building
-  buildingCountGlobal: number;  // number of buildings
+  totalSqft: number;
+  storiesGlobal: number;
+  buildingCountGlobal: number;
 
-  // Individual mode controls (up to 10)
-  buildings: BuildingSpec[];    // derived from B1..B10 params
+  buildings: BuildingSpec[];
 
-  // Optional logistics controls (do not affect rendering)
-  hoursPerDay: number;          // receiving hours/day
-  daysPerWeek: number;          // receiving days/week
-  gates: number;                // receiving gates
-  projectMonths: number;        // duration in months (exec friendly)
+  hoursPerDay: number;
+  daysPerWeek: number;
+  gates: number;
+  projectMonths: number;
 
-  // NEW optional input: staging area (Y/N coded as 1/0)
-  stagingArea: boolean;         // true => Y, false => N
+  stagingArea: boolean;         // Staging Area measure >=0.5 => Y
 };
 
 type RenderState = {
   inputs: Inputs;
-  headline: string;
-  subline: string;
+
+  hdr1: string;
+  sub1: string;
 
   totalBuildings: number;
   totalSqftAllBuildings: number;
@@ -47,15 +45,12 @@ type RenderState = {
   avgTrucksPerReceivingDay?: number;
   trucksPerHourPerGate?: number;
 
-  // NEW: throughput threshold + flag
   throughputThreshold?: number;
   isThroughputHigh?: boolean;
 
   securityStaffMin?: number;
   securityStaffMax?: number;
 };
-
-type Pt = { x: number; y: number };
 
 export class Visual implements IVisual {
   private root: HTMLElement;
@@ -79,7 +74,6 @@ export class Visual implements IVisual {
     this.content.style.position = "relative";
     this.root.appendChild(this.content);
 
-    // Export button (still available)
     const btn = document.createElement("button");
     btn.type = "button";
     btn.textContent = "Download Snapshot";
@@ -120,7 +114,7 @@ export class Visual implements IVisual {
   }
 
   // ----------------------------
-  // Input Parsing
+  // Parsing
   // ----------------------------
 
   private buildMeasureMap(values: powerbi.DataViewValueColumns): Map<string, number> {
@@ -140,61 +134,47 @@ export class Visual implements IVisual {
         if (typeof k === "string") {
           if (measures.has(k)) return measures.get(k)!;
         } else {
-          for (const [name, val] of measures) {
-            if (k.test(name)) return val;
-          }
+          for (const [name, val] of measures) if (k.test(name)) return val;
         }
       }
       return fallback;
     };
 
-    const mode = clampInt(get([/^mode$/i, /^scenario\s*mode$/i, /^input\s*mode$/i], 0), 0, 1);
-    const acreage = Math.max(0, get([/^acreage$/i, /^site\s*acreage$/i], 0));
+    const mode = clampInt(get([/^mode$/i], 0), 0, 1);
+    const acreage = Math.max(0, get([/^acreage$/i], 0));
 
-    // Global controls
-    const totalSqft = Math.max(0, get([/^total\s*sqft$/i, /^total\s*square\s*foot(age)?$/i, /^square\s*foot(age)?$/i], 0));
+    const totalSqft = Math.max(0, get([/^total\s*sqft$/i, /^total\s*square\s*foot/i], 0));
     const storiesGlobal = Math.max(0, get([/^stories$/i, /^stories\s*per\s*building$/i], 0));
-    const buildingCountGlobal = Math.max(0, get([/^building\s*count$/i, /^buildings$/i, /^number\s*of\s*buildings$/i], 0));
+    const buildingCountGlobal = Math.max(0, get([/^building\s*count$/i, /^buildings$/i], 0));
 
-    // Optional logistics controls
-    const hoursPerDay = Math.max(0, get([/^hours\s*per\s*day$/i, /^receiving\s*hours\s*per\s*day$/i], 0));
-    const daysPerWeek = Math.max(0, get([/^days\s*per\s*week$/i, /^receiving\s*days\s*per\s*week$/i], 0));
-    const gates = Math.max(0, get([/^receiving\s*gates$/i, /^gates$/i, /^number\s*of\s*gates$/i], 0));
+    const hoursPerDay = Math.max(0, get([/^hours\s*per\s*day$/i], 0));
+    const daysPerWeek = Math.max(0, get([/^days\s*per\s*week$/i], 0));
+    const gates = Math.max(0, get([/^receiving\s*gates$/i, /^gates$/i], 0));
 
-    // Project duration: preferred input is months
-    // Fallback: accept weeks and convert to months to avoid breaking older reports.
     const weeksPerMonth = 4.345;
-    const projectMonthsDirect = Math.max(0, get([/^project\s*months$/i, /^duration\s*\(months\)$/i], 0));
-    const projectWeeksFallback = Math.max(0, get([/^project\s*weeks$/i, /^duration\s*\(weeks\)$/i], 0));
-    const projectMonths = projectMonthsDirect > 0 ? projectMonthsDirect : (projectWeeksFallback > 0 ? (projectWeeksFallback / weeksPerMonth) : 0);
+    const projectMonthsDirect = Math.max(0, get([/^project\s*months$/i], 0));
+    const projectWeeksFallback = Math.max(0, get([/^project\s*weeks$/i], 0));
+    const projectMonths = projectMonthsDirect > 0 ? projectMonthsDirect : (projectWeeksFallback > 0 ? projectWeeksFallback / weeksPerMonth : 0);
 
-    // NEW: staging area Y/N coded as 1/0 (or any value >= 0.5 means Yes)
-    const stagingAreaVal = get(
-      [/^staging\s*area$/i, /^has\s*staging\s*area$/i, /^staging\s*area\s*\(y\/n\)$/i],
-      0
-    );
+    const stagingAreaVal = Math.max(0, get([/^staging\s*area$/i], 0));
     const stagingArea = stagingAreaVal >= 0.5;
 
-    // Individual controls: up to 10 buildings (default 0 => ignored)
-    const perSqft: number[] = new Array(10).fill(0);
-    const perStories: number[] = new Array(10).fill(0);
+    // Individual buildings (up to 10)
+    const perSqft = new Array(10).fill(0);
+    const perStories = new Array(10).fill(0);
 
     for (const [name, val] of measures) {
       const b = this.matchBuildingParam(name);
       if (!b) continue;
-
       const idx = b.index - 1;
       if (idx < 0 || idx >= 10) continue;
-
       if (b.kind === "sqft") perSqft[idx] = Math.max(0, val);
       if (b.kind === "stories") perStories[idx] = Math.max(0, val);
     }
 
     const buildings: BuildingSpec[] = [];
     for (let i = 0; i < 10; i++) {
-      const sqft = perSqft[i];
-      const stories = perStories[i];
-      if (sqft > 0 && stories > 0) buildings.push({ sqft, stories });
+      if (perSqft[i] > 0 && perStories[i] > 0) buildings.push({ sqft: perSqft[i], stories: perStories[i] });
     }
 
     return {
@@ -215,7 +195,6 @@ export class Visual implements IVisual {
   private matchBuildingParam(name: string): { index: number; kind: "sqft" | "stories" } | null {
     const n = name.trim();
 
-    // e.g. "B1 SqFt", "B10 Stories"
     let m = n.match(/^b(?:uilding)?\s*0*([1-9]|10)\s*(sqft|square\s*foot(age)?|stories)$/i);
     if (m) {
       const index = parseInt(m[1], 10);
@@ -223,7 +202,6 @@ export class Visual implements IVisual {
       return { index, kind: tail.startsWith("stor") ? "stories" : "sqft" };
     }
 
-    // e.g. "Building 3 SqFt"
     m = n.match(/^building\s*0*([1-9]|10)\s*(sqft|square\s*foot(age)?|stories)$/i);
     if (m) {
       const index = parseInt(m[1], 10);
@@ -231,7 +209,6 @@ export class Visual implements IVisual {
       return { index, kind: tail.startsWith("stor") ? "stories" : "sqft" };
     }
 
-    // e.g. "SqFt_Bldg_3" or "Stories_Bldg_7"
     m = n.match(/^(sqft|stories)\s*[_-]?\s*(bldg|building)\s*[_-]?\s*0*([1-9]|10)$/i);
     if (m) {
       const kind = m[1].toLowerCase() === "stories" ? "stories" : "sqft";
@@ -243,7 +220,7 @@ export class Visual implements IVisual {
   }
 
   // ----------------------------
-  // Scenario + Truck math
+  // Scenario + business math
   // ----------------------------
 
   private computeScenario(inputs: Inputs): RenderState {
@@ -254,57 +231,40 @@ export class Visual implements IVisual {
     const TRUCKS_PER_SQFT = 0.044;
     const TRUCKS_PER_ACRE = 18;
 
-    // NEW thresholds based on staging area
-    const THRESHOLD_WITH_STAGING = 30; // trucks per hour per gate
-    const THRESHOLD_NO_STAGING = 6;    // trucks per hour per gate
+    const THRESHOLD_WITH_STAGING = 30;
+    const THRESHOLD_NO_STAGING = 6;
 
     let buildings: BuildingSpec[] = [];
     let totalSqftAllBuildings = 0;
 
     if (inputs.mode === 1) {
-      buildings = inputs.buildings.map(b => ({
-        sqft: b.sqft,
-        stories: clampInt(b.stories, MIN_STORIES, MAX_STORIES)
-      }));
-
+      buildings = inputs.buildings.map(b => ({ sqft: b.sqft, stories: clampInt(b.stories, MIN_STORIES, MAX_STORIES) }));
       buildings = buildings.map(b => {
         const maxStoriesByFloor = Math.max(MIN_STORIES, Math.floor(b.sqft / MIN_FLOOR_AREA));
         const stories = Math.min(b.stories, maxStoriesByFloor, MAX_STORIES);
         return { sqft: b.sqft, stories };
       });
-
       totalSqftAllBuildings = buildings.reduce((acc, b) => acc + b.sqft, 0);
     } else {
       const bCount = clampInt(inputs.buildingCountGlobal || 1, 1, 20);
       const stories = clampInt(inputs.storiesGlobal || 1, MIN_STORIES, MAX_STORIES);
-
-      const sqftPerBuilding = bCount > 0 ? (inputs.totalSqft / bCount) : 0;
-
-      buildings = new Array(bCount).fill(0).map(() => ({
-        sqft: Math.max(0, sqftPerBuilding),
-        stories
-      }));
-
+      const sqftPerBuilding = bCount > 0 ? inputs.totalSqft / bCount : 0;
+      buildings = new Array(bCount).fill(0).map(() => ({ sqft: Math.max(0, sqftPerBuilding), stories }));
       buildings = buildings.map(b => {
         const maxStoriesByFloor = Math.max(MIN_STORIES, Math.floor(b.sqft / MIN_FLOOR_AREA));
-        const s = Math.min(b.stories, maxStoriesByFloor, MAX_STORIES);
-        return { sqft: b.sqft, stories: s };
+        return { sqft: b.sqft, stories: Math.min(b.stories, maxStoriesByFloor, MAX_STORIES) };
       });
-
       totalSqftAllBuildings = inputs.totalSqft;
     }
 
     const totalBuildings = buildings.length;
 
-    const headline =
-      inputs.mode === 1
-        ? `Individual Mode • Buildings Configured: ${totalBuildings}`
-        : `Global Mode • ${totalBuildings} Buildings`;
+    const hdr1 = inputs.mode === 1
+      ? `Individual Mode • Buildings Configured: ${totalBuildings}`
+      : `Global Mode • ${totalBuildings} Buildings`;
 
-    const subline =
-      `Total SqFt: ${fmt(Math.round(totalSqftAllBuildings))} • Site: ${fmt(Math.round(inputs.acreage))} acres`;
+    const sub1 = `Total SqFt: ${fmt(Math.round(totalSqftAllBuildings))} • Site: ${fmt(Math.round(inputs.acreage))} acres`;
 
-    // Trucks
     const buildingTrucks = Math.ceil(totalSqftAllBuildings * TRUCKS_PER_SQFT);
     const infraTrucks = Math.ceil(inputs.acreage * TRUCKS_PER_ACRE);
     const totalTrucks = buildingTrucks + infraTrucks;
@@ -314,29 +274,23 @@ export class Visual implements IVisual {
     let trucksPerHourPerGate: number | undefined;
 
     const weeksPerMonth = 4.345;
-
     if (inputs.projectMonths > 0 && inputs.daysPerWeek > 0) {
       const receivingDays = inputs.projectMonths * weeksPerMonth * inputs.daysPerWeek;
       if (receivingDays > 0) avgTrucksPerReceivingDay = totalTrucks / receivingDays;
     }
-
     if (avgTrucksPerReceivingDay !== undefined && inputs.hoursPerDay > 0 && inputs.gates > 0) {
       trucksPerHourPerGate = avgTrucksPerReceivingDay / (inputs.hoursPerDay * inputs.gates);
     }
 
-    // NEW threshold + flag
     const throughputThreshold = inputs.stagingArea ? THRESHOLD_WITH_STAGING : THRESHOLD_NO_STAGING;
-    const isThroughputHigh =
-      (trucksPerHourPerGate !== undefined) ? (trucksPerHourPerGate > throughputThreshold) : false;
+    const isThroughputHigh = trucksPerHourPerGate !== undefined ? (trucksPerHourPerGate > throughputThreshold) : false;
 
-    // Staffing assumptions (well-commented for easy tuning)
+    // Staffing assumptions (unchanged)
     const STAFF_PER_GATE_AT_ALL_TIMES = 2;
     const MIN_HOURS_PER_STAFF_PER_WEEK = 30;
     const MAX_HOURS_PER_STAFF_PER_WEEK = 50;
 
-    const weeklyCoverageHours =
-      (inputs.hoursPerDay > 0 && inputs.daysPerWeek > 0) ? (inputs.hoursPerDay * inputs.daysPerWeek) : 0;
-
+    const weeklyCoverageHours = (inputs.hoursPerDay > 0 && inputs.daysPerWeek > 0) ? (inputs.hoursPerDay * inputs.daysPerWeek) : 0;
     let securityStaffMin: number | undefined;
     let securityStaffMax: number | undefined;
 
@@ -348,8 +302,8 @@ export class Visual implements IVisual {
 
     return {
       inputs,
-      headline,
-      subline,
+      hdr1,
+      sub1,
       totalBuildings,
       totalSqftAllBuildings,
       totalTrucks,
@@ -365,7 +319,7 @@ export class Visual implements IVisual {
   }
 
   // ----------------------------
-  // Rendering (unchanged from your current version)
+  // Rendering
   // ----------------------------
 
   private render(viewport: powerbi.IViewport, s: any, state: RenderState): void {
@@ -389,18 +343,19 @@ export class Visual implements IVisual {
     const sceneTop = headerH + 6;
     const sceneH = Math.max(10, usableH - headerH - footerH);
 
+    // Top labels with dynamic formatting
     if (s.showLabels) {
-      this.drawText(g, state.headline, usableW / 2, 18, { size: 14, weight: "700", color: "#111827" });
-      this.drawText(g, state.subline, usableW / 2, 40, { size: 11, weight: "400", color: "#374151" });
+      this.drawTextBlock(g, state.hdr1, usableW, 0, 18, s.textHdr1, "#111827");
+      this.drawTextBlock(g, state.sub1, usableW, 0, 40, s.textSub1, "#374151");
     }
 
     const sceneG = document.createElementNS("http://www.w3.org/2000/svg", "g");
     sceneG.setAttribute("transform", `translate(0, ${sceneTop})`);
     g.appendChild(sceneG);
 
-    const specs: BuildingSpec[] =
-      state.inputs.mode === 1 ? (state.inputs.buildings.length ? state.inputs.buildings : [{ sqft: 0, stories: 0 }])
-                              : this.expandGlobal(state);
+    const specs = (state.inputs.mode === 1 && state.inputs.buildings.length)
+      ? state.inputs.buildings
+      : this.expandGlobal(state);
 
     const n = Math.max(1, specs.length);
     const cols = Math.ceil(Math.sqrt(n));
@@ -427,20 +382,20 @@ export class Visual implements IVisual {
       const cx = innerPad + w / 2;
       const groundY = innerPad + h * 0.72;
 
-      const spec = specs[idx];
+      // Grass only (no shadow circle, no “smile” road)
+      if (s.showLandscaping) this.drawGrassOnly(cg, cx, groundY, w, h);
 
-      if (s.showLandscaping) this.drawGrassPlane(cg, cx, groundY, w, h);
+      const spec = specs[idx];
 
       if (s.renderMode === "isometric") {
         this.renderIsometricDatacenter(cg, cx, groundY, w, h, spec, s);
       } else {
         this.renderFootprintStack(cg, innerPad, innerPad, w, h, spec, s);
       }
-
-      if (s.showLandscaping) this.drawHedges(cg, cx, groundY, w, h);
     }
 
-    this.drawFooter(g, usableW, usableH - footerH + 20, footerH, state);
+    // Footer
+    this.drawFooter(g, usableW, usableH - footerH + 18, footerH, state, s);
 
     this.content.appendChild(svg);
   }
@@ -455,10 +410,10 @@ export class Visual implements IVisual {
   }
 
   // ----------------------------
-  // Landscaping (existing)
+  // Landscaping (grass only)
   // ----------------------------
 
-  private drawGrassPlane(g: SVGGElement, cx: number, groundY: number, w: number, h: number): void {
+  private drawGrassOnly(g: SVGGElement, cx: number, groundY: number, w: number, h: number): void {
     const grass = document.createElementNS("http://www.w3.org/2000/svg", "ellipse");
     grass.setAttribute("cx", `${cx}`);
     grass.setAttribute("cy", `${groundY + h * 0.02}`);
@@ -466,36 +421,10 @@ export class Visual implements IVisual {
     grass.setAttribute("ry", `${h * 0.18}`);
     grass.setAttribute("fill", "rgba(34, 197, 94, 0.22)");
     g.appendChild(grass);
-
-    const road = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    road.setAttribute("d", `M ${cx - w * 0.30} ${groundY + h * 0.06} Q ${cx} ${groundY + h * 0.11} ${cx + w * 0.30} ${groundY + h * 0.06}`);
-    road.setAttribute("fill", "none");
-    road.setAttribute("stroke", "rgba(107,114,128,0.25)");
-    road.setAttribute("stroke-width", "3");
-    road.setAttribute("stroke-linecap", "round");
-    g.appendChild(road);
-  }
-
-  private drawHedges(g: SVGGElement, cx: number, groundY: number, w: number, h: number): void {
-    const r = Math.max(7, Math.min(w, h) * 0.045);
-    const positions: Array<[number, number]> = [
-      [cx - w * 0.16, groundY - h * 0.03],
-      [cx,            groundY - h * 0.02],
-      [cx + w * 0.16, groundY - h * 0.03]
-    ];
-
-    for (const [x, y] of positions) {
-      const blob = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-      blob.setAttribute("cx", `${x}`);
-      blob.setAttribute("cy", `${y}`);
-      blob.setAttribute("r", `${r}`);
-      blob.setAttribute("fill", "rgba(34, 197, 94, 0.92)");
-      g.appendChild(blob);
-    }
   }
 
   // ----------------------------
-  // Renderers (existing)
+  // Renderers
   // ----------------------------
 
   private renderFootprintStack(
@@ -507,23 +436,19 @@ export class Visual implements IVisual {
     spec: BuildingSpec,
     s: any
   ): void {
-    const footprintZoneH = h * 0.55;
-    const heightZoneH = h * 0.45;
-
     const stories = Math.max(1, Math.round(spec.stories));
     const footprintArea = Math.max(1, spec.sqft / stories);
-
     const ar = 1.6;
+
     const fw = Math.sqrt(footprintArea * ar);
     const fd = footprintArea / fw;
 
-    const scale = Math.min(w / fw, footprintZoneH / fd);
-
+    const scale = Math.min(w / fw, h / fd);
     const baseW = fw * scale;
     const baseD = fd * scale;
 
     const baseX = x0 + (w - baseW) / 2;
-    const baseY = y0 + footprintZoneH - baseD;
+    const baseY = y0 + (h - baseD) / 2;
 
     const baseRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
     baseRect.setAttribute("x", `${baseX}`);
@@ -553,7 +478,7 @@ export class Visual implements IVisual {
     const footprintSideFt = Math.sqrt(footprintArea);
     const heightFt = stories * FEET_PER_STORY;
 
-    const maxW = w * 0.80;
+    const maxW = w * 0.82;
     const maxH = h * 0.78;
 
     const scaleW = maxW / Math.max(1, 2 * footprintSideFt);
@@ -564,94 +489,324 @@ export class Visual implements IVisual {
     const base = footprintSideFt * ftToPx;
     const heightPx = heightFt * ftToPx;
 
-    const cy = groundY - heightPx;
+    // Center building over grass (not perfectly centered; slight upward bias)
+    const cx2 = cx;
+    const cyTop = (groundY - heightPx) - base * 0.05;
 
-    const shadow = document.createElementNS("http://www.w3.org/2000/svg", "ellipse");
-    shadow.setAttribute("cx", `${cx}`);
-    shadow.setAttribute("cy", `${groundY + base * 0.35}`);
-    shadow.setAttribute("rx", `${base * 1.10}`);
-    shadow.setAttribute("ry", `${base * 0.46}`);
-    shadow.setAttribute("fill", "rgba(0,0,0,0.10)");
-    g.appendChild(shadow);
-
+    // Faces
     const top: Pt[] = [
-      { x: cx, y: cy - base },
-      { x: cx + base, y: cy - base * 0.5 },
-      { x: cx, y: cy },
-      { x: cx - base, y: cy - base * 0.5 }
+      { x: cx2, y: cyTop - base },
+      { x: cx2 + base, y: cyTop - base * 0.5 },
+      { x: cx2, y: cyTop },
+      { x: cx2 - base, y: cyTop - base * 0.5 }
     ];
 
     const front: Pt[] = [
-      { x: cx - base, y: cy - base * 0.5 },
-      { x: cx, y: cy },
-      { x: cx, y: cy + heightPx },
-      { x: cx - base, y: cy + heightPx - base * 0.5 }
+      { x: cx2 - base, y: cyTop - base * 0.5 },
+      { x: cx2, y: cyTop },
+      { x: cx2, y: cyTop + heightPx },
+      { x: cx2 - base, y: cyTop + heightPx - base * 0.5 }
     ];
 
     const side: Pt[] = [
-      { x: cx, y: cy },
-      { x: cx + base, y: cy - base * 0.5 },
-      { x: cx + base, y: cy + heightPx - base * 0.5 },
-      { x: cx, y: cy + heightPx }
+      { x: cx2, y: cyTop },
+      { x: cx2 + base, y: cyTop - base * 0.5 },
+      { x: cx2 + base, y: cyTop + heightPx - base * 0.5 },
+      { x: cx2, y: cyTop + heightPx }
     ];
 
+    // Building
     this.poly(g, top, this.tint(s.fillColor, 0.25), s);
     this.poly(g, side, this.tint(s.fillColor, 0.45), s);
     this.poly(g, front, s.fillColor, s);
+
+    // WINDOWS with min pixel clamp + 0.8 band height default
+    this.drawIsometricWindows(g, front, stories, {
+      mechEvery: Math.max(2, Math.round(s.mechEvery ?? 4)),
+      windowDensity: Math.max(0.4, Math.min(2.0, s.windowDensity ?? 1.0)),
+      skipGroundFloor: true,
+      windowBandFraction: 0.8,    // requested
+      minWindowPx: 2.5
+    });
+
+    // DOUBLE DOOR (tall service bay) on SIDE face, full height
+    this.drawTallDoubleDoor(g, side, heightPx);
+
+    // HEDGES: 4 total, positioned off front corners, 20% along edges, sized to 0.8 of one story
+    if (s.showLandscaping) {
+      const storyPx = FEET_PER_STORY * ftToPx;
+      const hedgeRadius = Math.max(3, storyPx * 0.4); // diameter = 0.8 story
+      this.drawHedges4(g, top, heightPx, hedgeRadius);
+    }
   }
 
-  // ----------------------------
-  // Footer (updated for throughput warning + red styling)
-  // ----------------------------
+  private drawTallDoubleDoor(g: SVGGElement, side: Pt[], heightPx: number): void {
+    // Door panel is a vertical strip on side face from top to bottom.
+    // Use quad coordinates (u,v) on the side face.
+    const TL = side[0], TR = side[1], BR = side[2], BL = side[3];
 
-  private drawFooter(g: SVGGElement, width: number, yTop: number, footerH: number, state: RenderState): void {
+    // narrow door strip near the "front" edge of side face
+    const u0 = 0.10;
+    const u1 = 0.22;
+    const v0 = 0.0;
+    const v1 = 1.0;
+
+    const door = quadPoly(TL, TR, BR, BL, u0, u1, v0, v1);
+    door.setAttribute("fill", "rgba(17,24,39,0.10)");
+    door.setAttribute("stroke", "rgba(17,24,39,0.18)");
+    door.setAttribute("stroke-width", "0.8");
+    g.appendChild(door);
+
+    // seam line down the middle to indicate double door
+    const um = (u0 + u1) / 2;
+    const p1 = quadPoint(TL, TR, BR, BL, um, 0.08);
+    const p2 = quadPoint(TL, TR, BR, BL, um, 0.92);
+
+    const seam = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    seam.setAttribute("x1", `${p1.x}`);
+    seam.setAttribute("y1", `${p1.y}`);
+    seam.setAttribute("x2", `${p2.x}`);
+    seam.setAttribute("y2", `${p2.y}`);
+    seam.setAttribute("stroke", "rgba(17,24,39,0.25)");
+    seam.setAttribute("stroke-width", "0.8");
+    g.appendChild(seam);
+  }
+
+  private drawIsometricWindows(
+    g: SVGGElement,
+    front: Pt[],
+    stories: number,
+    opts: { mechEvery: number; windowDensity: number; skipGroundFloor: boolean; windowBandFraction: number; minWindowPx: number }
+  ): void {
+    const TL = front[0], TR = front[1], BR = front[2], BL = front[3];
+
+    const floors = Math.max(1, stories);
+    const band = 1 / floors;
+
+    const baseCols = Math.max(4, Math.round(8 * opts.windowDensity));
+    const marginU = 0.08;
+
+    // Estimate front face pixel height (approx) for minWindowPx clamp
+    const faceHeightPx = Math.hypot(BR.y - TR.y, BR.x - TR.x);
+
+    for (let f = 0; f < floors; f++) {
+      const floorFromBottom = floors - f;
+
+      const v0 = f * band;
+      const v1 = (f + 1) * band;
+
+      if (opts.skipGroundFloor && floorFromBottom === 1) continue;
+
+      const isMech = (floorFromBottom % opts.mechEvery === 0);
+      const cols = isMech ? Math.max(2, Math.floor(baseCols * 0.55)) : baseCols;
+
+      if (isMech) {
+        const strip = quadPoly(TL, TR, BR, BL, 0.0, 1.0, v0, v1);
+        strip.setAttribute("fill", "rgba(17,24,39,0.10)");
+        strip.setAttribute("stroke", "none");
+        g.appendChild(strip);
+      }
+
+      // Base window height fraction per story band (requested 0.8), but clamp in pixels so it stays visible
+      const desiredBandFrac = Math.max(0.4, Math.min(0.92, opts.windowBandFraction));
+      const desiredWindowHeightPx = (v1 - v0) * faceHeightPx * desiredBandFrac;
+      const windowHeightPx = Math.max(opts.minWindowPx, desiredWindowHeightPx);
+      const effectiveFrac = Math.min(0.92, windowHeightPx / ((v1 - v0) * faceHeightPx));
+
+      const centerV = (v0 + v1) / 2;
+      const winV0 = centerV - (band * effectiveFrac) / 2;
+      const winV1 = centerV + (band * effectiveFrac) / 2;
+
+      const windowW = (1 - marginU * 2) / cols * 0.55;
+      const gapW = (1 - marginU * 2) / cols * 0.45;
+
+      for (let c = 0; c < cols; c++) {
+        const u0 = marginU + c * (windowW + gapW);
+        const u1 = u0 + windowW;
+
+        const jitter = hash01(f + 1, c + 1);
+        const alpha = isMech ? 0.22 : 0.30;
+        const brighten = lerpNumber(0.0, 0.12, jitter);
+        const fill = rgbaTint("#E6F2FF", alpha, brighten);
+
+        const win = quadPoly(TL, TR, BR, BL, u0, u1, winV0, winV1);
+        win.setAttribute("fill", fill);
+        win.setAttribute("stroke", "rgba(17,24,39,0.08)");
+        win.setAttribute("stroke-width", "0.6");
+        g.appendChild(win);
+      }
+    }
+  }
+
+  private drawHedges4(g: SVGGElement, top: Pt[], heightPx: number, r: number): void {
+    // Compute ground diamond corners by shifting top face down by height
+    const ground: Pt[] = top.map(p => ({ x: p.x, y: p.y + heightPx }));
+
+    // Corners: top[3] is front-left-ish, top[2] is front-ish; but we use the two "front" corners on ground:
+    // The edge facing user is between ground[3] and ground[2] (based on our top definition order).
+    const FL = ground[3];
+    const FR = ground[2];
+
+    const BL = ground[0]; // back-ish
+    const BR = ground[1];
+
+    // Offsets: 20% along edges from each front corner
+    const t = 0.20;
+
+    // Two hedges near FL: along front edge toward FR, and along side edge toward BL
+    const h1 = lerpPt(FL, FR, t);
+    const h2 = lerpPt(FL, BL, t);
+
+    // Two hedges near FR: along front edge toward FL, and along side edge toward BR
+    const h3 = lerpPt(FR, FL, t);
+    const h4 = lerpPt(FR, BR, t);
+
+    const pts = [h1, h2, h3, h4];
+
+    for (const p of pts) {
+      const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      c.setAttribute("cx", `${p.x}`);
+      c.setAttribute("cy", `${p.y}`);
+      c.setAttribute("r", `${r}`);
+      c.setAttribute("fill", "rgba(34, 197, 94, 1.0)");
+      g.appendChild(c);
+    }
+  }
+
+  private drawFooter(g: SVGGElement, width: number, yTop: number, footerH: number, state: RenderState, s: any): void {
     const RED = "#DC2626";
 
-    const titleSize = Math.max(18, Math.round(footerH * 0.18));
-    const lineSize = Math.max(13, Math.round(footerH * 0.12));
-    const lineGap = Math.max(22, Math.round(footerH * 0.18));
-
-    const title = `Estimated Total Trucks (Project Duration): ${fmt(state.totalTrucks)}`;
-    this.drawText(g, title, width / 2, yTop, { size: titleSize, weight: "800", color: "#111827" });
-
-    const line1 = `Buildings: ${fmt(state.buildingTrucks)} trucks  •  Site Infrastructure: ${fmt(state.infraTrucks)} trucks`;
-    this.drawText(g, line1, width / 2, yTop + lineGap, { size: lineSize, weight: "400", color: "#374151" });
-
-    const line2 = (state.avgTrucksPerReceivingDay !== undefined)
+    // Build footer lines
+    const hdr2 = `Estimated Total Trucks (Project Duration): ${fmt(state.totalTrucks)}`;
+    const body1 = `Buildings: ${fmt(state.buildingTrucks)} trucks  •  Site Infrastructure: ${fmt(state.infraTrucks)} trucks`;
+    const body2 = (state.avgTrucksPerReceivingDay !== undefined)
       ? `Avg Trucks per Receiving Day: ${fmt(Math.ceil(state.avgTrucksPerReceivingDay))}`
       : `Avg Trucks per Receiving Day: N/A`;
-    this.drawText(g, line2, width / 2, yTop + lineGap * 2, { size: lineSize, weight: "400", color: "#374151" });
 
-    // NEW: staging area label and threshold
-    const stagingLabel = state.inputs.stagingArea ? "Y" : "N";
-    const threshold = state.throughputThreshold ?? (state.inputs.stagingArea ? 30 : 6);
-
-    // Trucks per hour per gate line: number turns red if above threshold
-    const line3Text = (state.trucksPerHourPerGate !== undefined)
+    const tphText = (state.trucksPerHourPerGate !== undefined)
       ? `Trucks per Hour per Gate: ${state.trucksPerHourPerGate.toFixed(1)}`
       : `Trucks per Hour per Gate: N/A`;
 
-    const line3Color =
-      (state.isThroughputHigh && state.trucksPerHourPerGate !== undefined) ? RED : "#374151";
-
-    this.drawText(g, line3Text, width / 2, yTop + lineGap * 3, { size: lineSize, weight: "400", color: line3Color });
-
-    // Optional staging/threshold informational line (neutral)
-    const line3b = `Staging Area: ${stagingLabel}  •  Threshold: ${fmt(threshold)} trucks per hour per gate`;
-    this.drawText(g, line3b, width / 2, yTop + lineGap * 4, { size: lineSize, weight: "400", color: "#374151" });
-
-    // Warning line in red if high throughput
-    if (state.isThroughputHigh) {
-      const warn = "High gate throughput. Consider adding gates or increasing hours of operation.";
-      this.drawText(g, warn, width / 2, yTop + lineGap * 5, { size: lineSize, weight: "700", color: RED });
-    }
-
-    const line5Y = state.isThroughputHigh ? (yTop + lineGap * 6) : (yTop + lineGap * 5);
-
-    const line5 = (state.securityStaffMin !== undefined && state.securityStaffMax !== undefined)
+    const fteText = (state.securityStaffMin !== undefined && state.securityStaffMax !== undefined)
       ? `Suggested Gate Security Staff: ${fmt(state.securityStaffMin)}–${fmt(state.securityStaffMax)}`
       : `Suggested Gate Security Staff: N/A`;
-    this.drawText(g, line5, width / 2, line5Y, { size: lineSize, weight: "400", color: "#111827" });
+
+    const cap = state.throughputThreshold ?? (state.inputs.stagingArea ? 30 : 6);
+    const warnText = `Gate throughput exceeds estimated capacity of ${cap} trucks per hour.`;
+
+    // Determine how many lines to fit; always keep FTE visible
+    const showWarn = !!state.isThroughputHigh;
+
+    // Use dynamic formatting styles from settings
+    const hdr2Style = s.textHdr2;
+    const bodyStyle = s.textBody;
+    const warnStyle = s.textWarn;
+
+    // Slightly reduce hdr2 size automatically if footer is tight
+    const hdr2Size = Math.max(12, Math.min(hdr2Style.size, Math.round(footerH * 0.16)));
+    const bodySize = Math.max(10, Math.min(bodyStyle.size, Math.round(footerH * 0.11)));
+    const warnSize = Math.max(9, Math.min(warnStyle.size, Math.round(footerH * 0.10)));
+
+    // Compute vertical spacing based on number of lines
+    const lines = showWarn ? 5 : 4; // hdr2 + body1 + body2 + tph + (warn) + fte
+    const gap = Math.max(16, Math.floor(footerH / (lines + 1)));
+
+    let y = yTop;
+
+    this.drawTextBlock(g, hdr2, width, 0, y, { ...hdr2Style, size: hdr2Size }, "#111827");
+    y += gap;
+
+    this.drawTextBlock(g, body1, width, 0, y, { ...bodyStyle, size: bodySize }, "#374151");
+    y += gap;
+
+    this.drawTextBlock(g, body2, width, 0, y, { ...bodyStyle, size: bodySize }, "#374151");
+    y += gap;
+
+    // tph line: color red if high
+    const tphColor = showWarn ? RED : "#374151";
+    this.drawTextBlock(g, tphText, width, 0, y, { ...bodyStyle, size: bodySize }, tphColor);
+    y += gap;
+
+    if (showWarn) {
+      // warning: smaller, not bold unless user chooses it
+      this.drawTextBlock(g, warnText, width, 0, y, { ...warnStyle, size: warnSize }, RED);
+      y += gap;
+    }
+
+    this.drawTextBlock(g, fteText, width, 0, y, { ...bodyStyle, size: bodySize }, "#111827");
+  }
+
+  // ----------------------------
+  // Text drawing with alignment + wrap
+  // ----------------------------
+
+  private drawTextBlock(
+    g: SVGGElement,
+    text: string,
+    maxWidth: number,
+    xPad: number,
+    y: number,
+    style: { size: number; bold: boolean; italic: boolean; underline: boolean; align: "left" | "center" | "right"; wrap: boolean },
+    color: string
+  ): void {
+    const x =
+      style.align === "left" ? xPad :
+      style.align === "right" ? (maxWidth - xPad) :
+      (maxWidth / 2);
+
+    const anchor =
+      style.align === "left" ? "start" :
+      style.align === "right" ? "end" : "middle";
+
+    const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    t.setAttribute("x", `${x}`);
+    t.setAttribute("y", `${y}`);
+    t.setAttribute("text-anchor", anchor);
+    t.setAttribute("fill", color);
+    t.setAttribute("font-family", "Segoe UI, sans-serif");
+    t.setAttribute("font-size", `${style.size}`);
+    t.setAttribute("font-weight", style.bold ? "700" : "400");
+    t.setAttribute("font-style", style.italic ? "italic" : "normal");
+    t.setAttribute("text-decoration", style.underline ? "underline" : "none");
+
+    if (!style.wrap) {
+      t.textContent = text;
+      g.appendChild(t);
+      return;
+    }
+
+    // Simple word-wrap into tspans using approximate character width.
+    const approxCharW = style.size * 0.58;
+    const usable = Math.max(40, maxWidth - xPad * 2);
+    const maxChars = Math.max(10, Math.floor(usable / approxCharW));
+
+    const words = text.split(/\s+/);
+    const lines: string[] = [];
+    let cur = "";
+
+    for (const w of words) {
+      const candidate = cur ? `${cur} ${w}` : w;
+      if (candidate.length <= maxChars) {
+        cur = candidate;
+      } else {
+        if (cur) lines.push(cur);
+        cur = w;
+      }
+    }
+    if (cur) lines.push(cur);
+
+    // First line at y, subsequent lines below
+    const lineH = Math.max(12, Math.round(style.size * 1.15));
+
+    for (let i = 0; i < lines.length; i++) {
+      const sp = document.createElementNS("http://www.w3.org/2000/svg", "tspan");
+      sp.setAttribute("x", `${x}`);
+      sp.setAttribute("dy", i === 0 ? "0" : `${lineH}`);
+      sp.textContent = lines[i];
+      t.appendChild(sp);
+    }
+
+    g.appendChild(t);
   }
 
   // ----------------------------
@@ -666,25 +821,6 @@ export class Visual implements IVisual {
     p.setAttribute("stroke-width", `${Math.max(1, s.outlineWidth * 0.7)}`);
     p.setAttribute("stroke-linejoin", "round");
     g.appendChild(p);
-  }
-
-  private drawText(
-    g: SVGGElement,
-    text: string,
-    x: number,
-    y: number,
-    opts: { size: number; weight: string; color: string }
-  ): void {
-    const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
-    t.setAttribute("x", `${x}`);
-    t.setAttribute("y", `${y}`);
-    t.setAttribute("text-anchor", "middle");
-    t.setAttribute("fill", opts.color);
-    t.setAttribute("font-family", "Segoe UI, sans-serif");
-    t.setAttribute("font-size", `${opts.size}`);
-    t.setAttribute("font-weight", opts.weight);
-    t.textContent = text;
-    g.appendChild(t);
   }
 
   private renderMessage(msg: string): void {
@@ -722,7 +858,7 @@ export class Visual implements IVisual {
 }
 
 // ----------------------------
-// Math helpers
+// Geometry + math helpers
 // ----------------------------
 
 function quadPoint(TL: Pt, TR: Pt, BR: Pt, BL: Pt, u: number, v: number): Pt {
@@ -741,6 +877,17 @@ function quadPoint(TL: Pt, TR: Pt, BR: Pt, BL: Pt, u: number, v: number): Pt {
   return { x, y };
 }
 
+function quadPoly(TL: Pt, TR: Pt, BR: Pt, BL: Pt, u0: number, u1: number, v0: number, v1: number): SVGPolygonElement {
+  const p1 = quadPoint(TL, TR, BR, BL, u0, v0);
+  const p2 = quadPoint(TL, TR, BR, BL, u1, v0);
+  const p3 = quadPoint(TL, TR, BR, BL, u1, v1);
+  const p4 = quadPoint(TL, TR, BR, BL, u0, v1);
+
+  const poly = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+  poly.setAttribute("points", `${p1.x},${p1.y} ${p2.x},${p2.y} ${p3.x},${p3.y} ${p4.x},${p4.y}`);
+  return poly;
+}
+
 function clampInt(x: number, min: number, max: number): number {
   if (!Number.isFinite(x)) return min;
   return Math.max(min, Math.min(max, Math.round(x)));
@@ -752,6 +899,10 @@ function fmt(n: number): string {
 
 function lerpNumber(a: number, b: number, t: number): number {
   return a + (b - a) * t;
+}
+
+function lerpPt(a: Pt, b: Pt, t: number): Pt {
+  return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
 }
 
 function hash01(a: number, b: number): number {
