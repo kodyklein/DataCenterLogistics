@@ -25,4 +25,4 @@ export interface BuildingSettings {
     textWarn: TextStyle;
 }
 export declare const DefaultSettings: BuildingSettings;
-export declare function getSettings(dataView: powerbi.DataView | undefined): BuildingSettings;
+export declare function getSettings(dataView?: powerbi.DataView): BuildingSettings;

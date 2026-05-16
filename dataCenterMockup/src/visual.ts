@@ -4,50 +4,43 @@ import powerbi from "powerbi-visuals-api";
 import IVisual = powerbi.extensibility.visual.IVisual;
 import VisualConstructorOptions = powerbi.extensibility.visual.VisualConstructorOptions;
 import VisualUpdateOptions = powerbi.extensibility.visual.VisualUpdateOptions;
-import IDownloadService = powerbi.extensibility.IDownloadService;
+import EnumerateVisualObjectInstancesOptions = powerbi.EnumerateVisualObjectInstancesOptions;
 
-import { getSettings } from "./settings";
+import IDownloadService = powerbi.extensibility.IDownloadService;
+import VisualObjectInstance = powerbi.VisualObjectInstance;
+
+import { getSettings, DefaultSettings, BuildingSettings } from "./settings";
 
 type BuildingSpec = { sqft: number; stories: number };
 type Pt = { x: number; y: number };
 
 type Inputs = {
-  mode: number;                 // 0=Global, 1=Individual
+  mode: number; // 0=Global, 1=Individual
   acreage: number;
-
   totalSqft: number;
   storiesGlobal: number;
   buildingCountGlobal: number;
-
   buildings: BuildingSpec[];
-
   hoursPerDay: number;
   daysPerWeek: number;
   gates: number;
   projectMonths: number;
-
-  stagingArea: boolean;         // Staging Area measure >=0.5 => Y
+  stagingArea: boolean; // Staging Area measure >=0.5 => Y
 };
 
 type RenderState = {
   inputs: Inputs;
-
   hdr1: string;
   sub1: string;
-
   totalBuildings: number;
   totalSqftAllBuildings: number;
-
   totalTrucks: number;
   buildingTrucks: number;
   infraTrucks: number;
-
   avgTrucksPerReceivingDay?: number;
   trucksPerHourPerGate?: number;
-
   throughputThreshold?: number;
   isThroughputHigh?: boolean;
-
   securityStaffMin?: number;
   securityStaffMax?: number;
 };
@@ -56,8 +49,10 @@ export class Visual implements IVisual {
   private root: HTMLElement;
   private content: HTMLDivElement;
   private lastSvg?: SVGSVGElement;
-
   private downloadService: IDownloadService;
+
+  // Store current settings so enumerateObjectInstances can expose them
+  private settings: BuildingSettings = DefaultSettings;
 
   constructor(options: VisualConstructorOptions) {
     this.root = options.element;
@@ -92,6 +87,73 @@ export class Visual implements IVisual {
     this.root.appendChild(btn);
   }
 
+  // ✅ THIS is what makes the Format pane show your capabilities objects.
+  public enumerateObjectInstances(options: EnumerateVisualObjectInstancesOptions): VisualObjectInstance[] {
+    const s = this.settings ?? DefaultSettings;
+
+    if (options.objectName === "building") {
+      return [{
+        objectName: "building",
+        selector: null as any,
+        properties: {
+          fillColor: { solid: { color: s.fillColor } },
+          outlineColor: { solid: { color: s.outlineColor } },
+          outlineWidth: s.outlineWidth,
+          showLabels: s.showLabels,
+          renderMode: s.renderMode,
+          mechEvery: s.mechEvery,
+          showLandscaping: s.showLandscaping, // still exposed, but landscaping drawing is commented out in render
+          windowDensity: s.windowDensity
+        }
+      }];
+    }
+
+    if (options.objectName === "text") {
+      return [{
+        objectName: "text",
+        selector: null as any,
+        properties: {
+          hdr1_size: s.textHdr1.size,
+          hdr1_bold: s.textHdr1.bold,
+          hdr1_italic: s.textHdr1.italic,
+          hdr1_underline: s.textHdr1.underline,
+          hdr1_align: s.textHdr1.align,
+          hdr1_wrap: s.textHdr1.wrap,
+
+          sub1_size: s.textSub1.size,
+          sub1_bold: s.textSub1.bold,
+          sub1_italic: s.textSub1.italic,
+          sub1_underline: s.textSub1.underline,
+          sub1_align: s.textSub1.align,
+          sub1_wrap: s.textSub1.wrap,
+
+          hdr2_size: s.textHdr2.size,
+          hdr2_bold: s.textHdr2.bold,
+          hdr2_italic: s.textHdr2.italic,
+          hdr2_underline: s.textHdr2.underline,
+          hdr2_align: s.textHdr2.align,
+          hdr2_wrap: s.textHdr2.wrap,
+
+          body_size: s.textBody.size,
+          body_bold: s.textBody.bold,
+          body_italic: s.textBody.italic,
+          body_underline: s.textBody.underline,
+          body_align: s.textBody.align,
+          body_wrap: s.textBody.wrap,
+
+          warn_size: s.textWarn.size,
+          warn_bold: s.textWarn.bold,
+          warn_italic: s.textWarn.italic,
+          warn_underline: s.textWarn.underline,
+          warn_align: s.textWarn.align,
+          warn_wrap: s.textWarn.wrap
+        }
+      }];
+    }
+
+    return [];
+  }
+
   public update(options: VisualUpdateOptions): void {
     while (this.content.firstChild) this.content.removeChild(this.content.firstChild);
     this.lastSvg = undefined;
@@ -106,6 +168,8 @@ export class Visual implements IVisual {
     }
 
     const s = getSettings(dataView);
+    this.settings = s; // keep for enumerateObjectInstances
+
     const measureMap = this.buildMeasureMap(values);
     const inputs = this.parseInputs(measureMap);
     const state = this.computeScenario(inputs);
@@ -116,7 +180,6 @@ export class Visual implements IVisual {
   // ----------------------------
   // Parsing
   // ----------------------------
-
   private buildMeasureMap(values: powerbi.DataViewValueColumns): Map<string, number> {
     const m = new Map<string, number>();
     for (const col of values) {
@@ -142,11 +205,9 @@ export class Visual implements IVisual {
 
     const mode = clampInt(get([/^mode$/i], 0), 0, 1);
     const acreage = Math.max(0, get([/^acreage$/i], 0));
-
     const totalSqft = Math.max(0, get([/^total\s*sqft$/i, /^total\s*square\s*foot/i], 0));
     const storiesGlobal = Math.max(0, get([/^stories$/i, /^stories\s*per\s*building$/i], 0));
     const buildingCountGlobal = Math.max(0, get([/^building\s*count$/i, /^buildings$/i], 0));
-
     const hoursPerDay = Math.max(0, get([/^hours\s*per\s*day$/i], 0));
     const daysPerWeek = Math.max(0, get([/^days\s*per\s*week$/i], 0));
     const gates = Math.max(0, get([/^receiving\s*gates$/i, /^gates$/i], 0));
@@ -154,7 +215,10 @@ export class Visual implements IVisual {
     const weeksPerMonth = 4.345;
     const projectMonthsDirect = Math.max(0, get([/^project\s*months$/i], 0));
     const projectWeeksFallback = Math.max(0, get([/^project\s*weeks$/i], 0));
-    const projectMonths = projectMonthsDirect > 0 ? projectMonthsDirect : (projectWeeksFallback > 0 ? projectWeeksFallback / weeksPerMonth : 0);
+    const projectMonths =
+      projectMonthsDirect > 0
+        ? projectMonthsDirect
+        : (projectWeeksFallback > 0 ? projectWeeksFallback / weeksPerMonth : 0);
 
     const stagingAreaVal = Math.max(0, get([/^staging\s*area$/i], 0));
     const stagingArea = stagingAreaVal >= 0.5;
@@ -195,6 +259,7 @@ export class Visual implements IVisual {
   private matchBuildingParam(name: string): { index: number; kind: "sqft" | "stories" } | null {
     const n = name.trim();
 
+    // e.g. "Building 1 Sqft", "B1 Stories"
     let m = n.match(/^b(?:uilding)?\s*0*([1-9]|10)\s*(sqft|square\s*foot(age)?|stories)$/i);
     if (m) {
       const index = parseInt(m[1], 10);
@@ -209,6 +274,7 @@ export class Visual implements IVisual {
       return { index, kind: tail.startsWith("stor") ? "stories" : "sqft" };
     }
 
+    // e.g. "Sqft_Building_1" or "Stories-Bldg-2"
     m = n.match(/^(sqft|stories)\s*[_-]?\s*(bldg|building)\s*[_-]?\s*0*([1-9]|10)$/i);
     if (m) {
       const kind = m[1].toLowerCase() === "stories" ? "stories" : "sqft";
@@ -222,7 +288,6 @@ export class Visual implements IVisual {
   // ----------------------------
   // Scenario + business math
   // ----------------------------
-
   private computeScenario(inputs: Inputs): RenderState {
     const MIN_STORIES = 1;
     const MAX_STORIES = 20;
@@ -249,6 +314,7 @@ export class Visual implements IVisual {
       const bCount = clampInt(inputs.buildingCountGlobal || 1, 1, 20);
       const stories = clampInt(inputs.storiesGlobal || 1, MIN_STORIES, MAX_STORIES);
       const sqftPerBuilding = bCount > 0 ? inputs.totalSqft / bCount : 0;
+
       buildings = new Array(bCount).fill(0).map(() => ({ sqft: Math.max(0, sqftPerBuilding), stories }));
       buildings = buildings.map(b => {
         const maxStoriesByFloor = Math.max(MIN_STORIES, Math.floor(b.sqft / MIN_FLOOR_AREA));
@@ -258,7 +324,6 @@ export class Visual implements IVisual {
     }
 
     const totalBuildings = buildings.length;
-
     const hdr1 = inputs.mode === 1
       ? `Individual Mode • Buildings Configured: ${totalBuildings}`
       : `Global Mode • ${totalBuildings} Buildings`;
@@ -278,6 +343,7 @@ export class Visual implements IVisual {
       const receivingDays = inputs.projectMonths * weeksPerMonth * inputs.daysPerWeek;
       if (receivingDays > 0) avgTrucksPerReceivingDay = totalTrucks / receivingDays;
     }
+
     if (avgTrucksPerReceivingDay !== undefined && inputs.hoursPerDay > 0 && inputs.gates > 0) {
       trucksPerHourPerGate = avgTrucksPerReceivingDay / (inputs.hoursPerDay * inputs.gates);
     }
@@ -285,12 +351,15 @@ export class Visual implements IVisual {
     const throughputThreshold = inputs.stagingArea ? THRESHOLD_WITH_STAGING : THRESHOLD_NO_STAGING;
     const isThroughputHigh = trucksPerHourPerGate !== undefined ? (trucksPerHourPerGate > throughputThreshold) : false;
 
-    // Staffing assumptions (unchanged)
+    // Staffing assumptions
     const STAFF_PER_GATE_AT_ALL_TIMES = 2;
     const MIN_HOURS_PER_STAFF_PER_WEEK = 30;
     const MAX_HOURS_PER_STAFF_PER_WEEK = 50;
 
-    const weeklyCoverageHours = (inputs.hoursPerDay > 0 && inputs.daysPerWeek > 0) ? (inputs.hoursPerDay * inputs.daysPerWeek) : 0;
+    const weeklyCoverageHours = (inputs.hoursPerDay > 0 && inputs.daysPerWeek > 0)
+      ? (inputs.hoursPerDay * inputs.daysPerWeek)
+      : 0;
+
     let securityStaffMin: number | undefined;
     let securityStaffMax: number | undefined;
 
@@ -321,8 +390,7 @@ export class Visual implements IVisual {
   // ----------------------------
   // Rendering
   // ----------------------------
-
-  private render(viewport: powerbi.IViewport, s: any, state: RenderState): void {
+  private render(viewport: powerbi.IViewport, s: BuildingSettings, state: RenderState): void {
     const padding = 16;
 
     const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -340,10 +408,11 @@ export class Visual implements IVisual {
 
     const footerH = Math.max(140, Math.floor(usableH * 0.25));
     const headerH = s.showLabels ? 54 : 0;
+
     const sceneTop = headerH + 6;
     const sceneH = Math.max(10, usableH - headerH - footerH);
 
-    // Top labels with dynamic formatting
+    // Top labels
     if (s.showLabels) {
       this.drawTextBlock(g, state.hdr1, usableW, 0, 18, s.textHdr1, "#111827");
       this.drawTextBlock(g, state.sub1, usableW, 0, 40, s.textSub1, "#374151");
@@ -380,13 +449,15 @@ export class Visual implements IVisual {
       const h = Math.max(60, cellH - innerPad * 2);
 
       const cx = innerPad + w / 2;
-      const groundY = innerPad + h * 0.72;
+      const groundY = innerPad + h * 0.74;
 
-      // Grass only (no shadow circle, no “smile” road)
-      if (s.showLandscaping) this.drawGrassOnly(cg, cx, groundY, w, h);
+      // ------------------------------------------------------------
+      // LANDSCAPING / GRASS / HEDGES
+      // Commented out per your request (simplify for now).
+      // ------------------------------------------------------------
+      // if (s.showLandscaping) this.drawGrassOnly(cg, cx, groundY, w, h);
 
       const spec = specs[idx];
-
       if (s.renderMode === "isometric") {
         this.renderIsometricDatacenter(cg, cx, groundY, w, h, spec, s);
       } else {
@@ -404,15 +475,16 @@ export class Visual implements IVisual {
     const count = clampInt(state.inputs.buildingCountGlobal || 1, 1, 20);
     const stories = clampInt(state.inputs.storiesGlobal || 1, 1, 20);
     const sqftPer = count > 0 ? (state.totalSqftAllBuildings / count) : 0;
+
     const arr: BuildingSpec[] = [];
     for (let i = 0; i < count; i++) arr.push({ sqft: Math.max(0, sqftPer), stories });
     return arr;
   }
 
   // ----------------------------
-  // Landscaping (grass only)
+  // Landscaping (commented out for now)
   // ----------------------------
-
+  /*
   private drawGrassOnly(g: SVGGElement, cx: number, groundY: number, w: number, h: number): void {
     const grass = document.createElementNS("http://www.w3.org/2000/svg", "ellipse");
     grass.setAttribute("cx", `${cx}`);
@@ -422,11 +494,11 @@ export class Visual implements IVisual {
     grass.setAttribute("fill", "rgba(34, 197, 94, 0.22)");
     g.appendChild(grass);
   }
+  */
 
   // ----------------------------
   // Renderers
   // ----------------------------
-
   private renderFootprintStack(
     g: SVGGElement,
     x0: number,
@@ -434,16 +506,17 @@ export class Visual implements IVisual {
     w: number,
     h: number,
     spec: BuildingSpec,
-    s: any
+    s: BuildingSettings
   ): void {
     const stories = Math.max(1, Math.round(spec.stories));
     const footprintArea = Math.max(1, spec.sqft / stories);
-    const ar = 1.6;
 
+    const ar = 1.6;
     const fw = Math.sqrt(footprintArea * ar);
     const fd = footprintArea / fw;
 
     const scale = Math.min(w / fw, h / fd);
+
     const baseW = fw * scale;
     const baseD = fd * scale;
 
@@ -469,9 +542,10 @@ export class Visual implements IVisual {
     w: number,
     h: number,
     spec: BuildingSpec,
-    s: any
+    s: BuildingSettings
   ): void {
     const stories = Math.max(1, Math.round(spec.stories));
+
     const FEET_PER_STORY = 10;
 
     const footprintArea = Math.max(1, spec.sqft / stories);
@@ -489,7 +563,7 @@ export class Visual implements IVisual {
     const base = footprintSideFt * ftToPx;
     const heightPx = heightFt * ftToPx;
 
-    // Center building over grass (not perfectly centered; slight upward bias)
+    // Center building (slight upward bias)
     const cx2 = cx;
     const cyTop = (groundY - heightPx) - base * 0.05;
 
@@ -520,36 +594,39 @@ export class Visual implements IVisual {
     this.poly(g, side, this.tint(s.fillColor, 0.45), s);
     this.poly(g, front, s.fillColor, s);
 
-    // WINDOWS with min pixel clamp + 0.8 band height default
+    // WINDOWS: 0.8 story band height (requested) + min pixel clamp
     this.drawIsometricWindows(g, front, stories, {
       mechEvery: Math.max(2, Math.round(s.mechEvery ?? 4)),
       windowDensity: Math.max(0.4, Math.min(2.0, s.windowDensity ?? 1.0)),
       skipGroundFloor: true,
-      windowBandFraction: 0.8,    // requested
+      windowBandFraction: 0.8,
       minWindowPx: 2.5
     });
 
-    // DOUBLE DOOR (tall service bay) on SIDE face, full height
-    this.drawTallDoubleDoor(g, side, heightPx);
+    // DOUBLE DOOR: side face, centered horizontally, only first-floor height
+    this.drawDoubleDoorGroundFloor(g, side, stories);
 
-    // HEDGES: 4 total, positioned off front corners, 20% along edges, sized to 0.8 of one story
-    if (s.showLandscaping) {
-      const storyPx = FEET_PER_STORY * ftToPx;
-      const hedgeRadius = Math.max(3, storyPx * 0.4); // diameter = 0.8 story
-      this.drawHedges4(g, top, heightPx, hedgeRadius);
-    }
+    // ------------------------------------------------------------
+    // HEDGES (commented out for now, per your request)
+    // ------------------------------------------------------------
+    // if (s.showLandscaping) {
+    //   const storyPx = FEET_PER_STORY * ftToPx;
+    //   const hedgeRadius = Math.max(3, storyPx * 0.4); // diameter = 0.8 story
+    //   this.drawHedges4(g, top, heightPx, hedgeRadius);
+    // }
   }
 
-  private drawTallDoubleDoor(g: SVGGElement, side: Pt[], heightPx: number): void {
-    // Door panel is a vertical strip on side face from top to bottom.
-    // Use quad coordinates (u,v) on the side face.
+  private drawDoubleDoorGroundFloor(g: SVGGElement, side: Pt[], stories: number): void {
     const TL = side[0], TR = side[1], BR = side[2], BL = side[3];
 
-    // narrow door strip near the "front" edge of side face
-    const u0 = 0.10;
-    const u1 = 0.22;
-    const v0 = 0.0;
+    // vertical range for ground floor band
+    const floors = Math.max(1, Math.round(stories));
+    const v0 = 1 - (1 / floors);
     const v1 = 1.0;
+
+    // centered on side face
+    const u0 = 0.40;
+    const u1 = 0.60;
 
     const door = quadPoly(TL, TR, BR, BL, u0, u1, v0, v1);
     door.setAttribute("fill", "rgba(17,24,39,0.10)");
@@ -557,10 +634,9 @@ export class Visual implements IVisual {
     door.setAttribute("stroke-width", "0.8");
     g.appendChild(door);
 
-    // seam line down the middle to indicate double door
     const um = (u0 + u1) / 2;
-    const p1 = quadPoint(TL, TR, BR, BL, um, 0.08);
-    const p2 = quadPoint(TL, TR, BR, BL, um, 0.92);
+    const p1 = quadPoint(TL, TR, BR, BL, um, v0 + 0.08 * (v1 - v0));
+    const p2 = quadPoint(TL, TR, BR, BL, um, v1 - 0.08 * (v1 - v0));
 
     const seam = document.createElementNS("http://www.w3.org/2000/svg", "line");
     seam.setAttribute("x1", `${p1.x}`);
@@ -586,12 +662,10 @@ export class Visual implements IVisual {
     const baseCols = Math.max(4, Math.round(8 * opts.windowDensity));
     const marginU = 0.08;
 
-    // Estimate front face pixel height (approx) for minWindowPx clamp
     const faceHeightPx = Math.hypot(BR.y - TR.y, BR.x - TR.x);
 
     for (let f = 0; f < floors; f++) {
       const floorFromBottom = floors - f;
-
       const v0 = f * band;
       const v1 = (f + 1) * band;
 
@@ -607,9 +681,9 @@ export class Visual implements IVisual {
         g.appendChild(strip);
       }
 
-      // Base window height fraction per story band (requested 0.8), but clamp in pixels so it stays visible
       const desiredBandFrac = Math.max(0.4, Math.min(0.92, opts.windowBandFraction));
       const desiredWindowHeightPx = (v1 - v0) * faceHeightPx * desiredBandFrac;
+
       const windowHeightPx = Math.max(opts.minWindowPx, desiredWindowHeightPx);
       const effectiveFrac = Math.min(0.92, windowHeightPx / ((v1 - v0) * faceHeightPx));
 
@@ -638,31 +712,21 @@ export class Visual implements IVisual {
     }
   }
 
+  /*
   private drawHedges4(g: SVGGElement, top: Pt[], heightPx: number, r: number): void {
-    // Compute ground diamond corners by shifting top face down by height
     const ground: Pt[] = top.map(p => ({ x: p.x, y: p.y + heightPx }));
-
-    // Corners: top[3] is front-left-ish, top[2] is front-ish; but we use the two "front" corners on ground:
-    // The edge facing user is between ground[3] and ground[2] (based on our top definition order).
     const FL = ground[3];
     const FR = ground[2];
-
-    const BL = ground[0]; // back-ish
+    const BL = ground[0];
     const BR = ground[1];
 
-    // Offsets: 20% along edges from each front corner
     const t = 0.20;
-
-    // Two hedges near FL: along front edge toward FR, and along side edge toward BL
     const h1 = lerpPt(FL, FR, t);
     const h2 = lerpPt(FL, BL, t);
-
-    // Two hedges near FR: along front edge toward FL, and along side edge toward BR
     const h3 = lerpPt(FR, FL, t);
     const h4 = lerpPt(FR, BR, t);
 
     const pts = [h1, h2, h3, h4];
-
     for (const p of pts) {
       const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
       c.setAttribute("cx", `${p.x}`);
@@ -672,13 +736,14 @@ export class Visual implements IVisual {
       g.appendChild(c);
     }
   }
+  */
 
-  private drawFooter(g: SVGGElement, width: number, yTop: number, footerH: number, state: RenderState, s: any): void {
+  private drawFooter(g: SVGGElement, width: number, yTop: number, footerH: number, state: RenderState, s: BuildingSettings): void {
     const RED = "#DC2626";
 
-    // Build footer lines
     const hdr2 = `Estimated Total Trucks (Project Duration): ${fmt(state.totalTrucks)}`;
-    const body1 = `Buildings: ${fmt(state.buildingTrucks)} trucks  •  Site Infrastructure: ${fmt(state.infraTrucks)} trucks`;
+    const body1 = `Buildings: ${fmt(state.buildingTrucks)} trucks • Site Infrastructure: ${fmt(state.infraTrucks)} trucks`;
+
     const body2 = (state.avgTrucksPerReceivingDay !== undefined)
       ? `Avg Trucks per Receiving Day: ${fmt(Math.ceil(state.avgTrucksPerReceivingDay))}`
       : `Avg Trucks per Receiving Day: N/A`;
@@ -694,52 +759,61 @@ export class Visual implements IVisual {
     const cap = state.throughputThreshold ?? (state.inputs.stagingArea ? 30 : 6);
     const warnText = `Gate throughput exceeds estimated capacity of ${cap} trucks per hour.`;
 
-    // Determine how many lines to fit; always keep FTE visible
     const showWarn = !!state.isThroughputHigh;
 
-    // Use dynamic formatting styles from settings
-    const hdr2Style = s.textHdr2;
-    const bodyStyle = s.textBody;
-    const warnStyle = s.textWarn;
+    // Build a list of lines so we can guarantee FTE stays visible
+    const lines: Array<{ text: string; style: any; color: string }> = [];
 
-    // Slightly reduce hdr2 size automatically if footer is tight
-    const hdr2Size = Math.max(12, Math.min(hdr2Style.size, Math.round(footerH * 0.16)));
-    const bodySize = Math.max(10, Math.min(bodyStyle.size, Math.round(footerH * 0.11)));
-    const warnSize = Math.max(9, Math.min(warnStyle.size, Math.round(footerH * 0.10)));
+    // Slightly smaller header than before (less unwieldy)
+    const hdr2Size = Math.max(12, Math.min(s.textHdr2.size, Math.round(footerH * 0.13)));
+    const bodySize = Math.max(10, Math.min(s.textBody.size, Math.round(footerH * 0.11)));
+    const warnSize = Math.max(9, Math.min(s.textWarn.size, Math.round(footerH * 0.095)));
 
-    // Compute vertical spacing based on number of lines
-    const lines = showWarn ? 5 : 4; // hdr2 + body1 + body2 + tph + (warn) + fte
-    const gap = Math.max(16, Math.floor(footerH / (lines + 1)));
+    lines.push({ text: hdr2, style: { ...s.textHdr2, size: hdr2Size }, color: "#111827" });
+    lines.push({ text: body1, style: { ...s.textBody, size: bodySize }, color: "#374151" });
+    lines.push({ text: body2, style: { ...s.textBody, size: bodySize }, color: "#374151" });
 
-    let y = yTop;
-
-    this.drawTextBlock(g, hdr2, width, 0, y, { ...hdr2Style, size: hdr2Size }, "#111827");
-    y += gap;
-
-    this.drawTextBlock(g, body1, width, 0, y, { ...bodyStyle, size: bodySize }, "#374151");
-    y += gap;
-
-    this.drawTextBlock(g, body2, width, 0, y, { ...bodyStyle, size: bodySize }, "#374151");
-    y += gap;
-
-    // tph line: color red if high
     const tphColor = showWarn ? RED : "#374151";
-    this.drawTextBlock(g, tphText, width, 0, y, { ...bodyStyle, size: bodySize }, tphColor);
-    y += gap;
+    lines.push({ text: tphText, style: { ...s.textBody, size: bodySize }, color: tphColor });
 
     if (showWarn) {
-      // warning: smaller, not bold unless user chooses it
-      this.drawTextBlock(g, warnText, width, 0, y, { ...warnStyle, size: warnSize }, RED);
-      y += gap;
+      lines.push({ text: warnText, style: { ...s.textWarn, size: warnSize }, color: RED });
     }
 
-    this.drawTextBlock(g, fteText, width, 0, y, { ...bodyStyle, size: bodySize }, "#111827");
+    // Always last so it never "falls off"
+    lines.push({ text: fteText, style: { ...s.textBody, size: bodySize }, color: "#111827" });
+
+    // Height-aware layout so nothing disappears
+    const maxY = yTop + footerH - 8;
+    const lineHeights = lines.map(l => Math.max(14, Math.round(l.style.size * 1.25)));
+    let totalTextH = lineHeights.reduce((a, b) => a + b, 0);
+
+    // Base gap, then compress if needed
+    let gap = 10;
+    const remaining = (maxY - yTop) - totalTextH;
+    if (remaining > 0) {
+      gap = Math.max(8, Math.floor(remaining / (lines.length + 1)));
+    } else {
+      // If it doesn't fit, reduce gap and shrink a touch
+      gap = 6;
+    }
+
+    let y = yTop + gap;
+
+    for (let i = 0; i < lines.length; i++) {
+      const lh = lineHeights[i];
+      // If we’re about to overflow, nudge upward / compress spacing slightly
+      if (y + lh > maxY) {
+        y = Math.max(yTop + 4, maxY - lh);
+      }
+      this.drawTextBlock(g, lines[i].text, width, 0, y, lines[i].style, lines[i].color);
+      y += lh + gap;
+    }
   }
 
   // ----------------------------
   // Text drawing with alignment + wrap
   // ----------------------------
-
   private drawTextBlock(
     g: SVGGElement,
     text: string,
@@ -751,12 +825,13 @@ export class Visual implements IVisual {
   ): void {
     const x =
       style.align === "left" ? xPad :
-      style.align === "right" ? (maxWidth - xPad) :
-      (maxWidth / 2);
+        style.align === "right" ? (maxWidth - xPad) :
+          (maxWidth / 2);
 
     const anchor =
       style.align === "left" ? "start" :
-      style.align === "right" ? "end" : "middle";
+        style.align === "right" ? "end" :
+          "middle";
 
     const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
     t.setAttribute("x", `${x}`);
@@ -782,8 +857,8 @@ export class Visual implements IVisual {
 
     const words = text.split(/\s+/);
     const lines: string[] = [];
-    let cur = "";
 
+    let cur = "";
     for (const w of words) {
       const candidate = cur ? `${cur} ${w}` : w;
       if (candidate.length <= maxChars) {
@@ -795,9 +870,7 @@ export class Visual implements IVisual {
     }
     if (cur) lines.push(cur);
 
-    // First line at y, subsequent lines below
     const lineH = Math.max(12, Math.round(style.size * 1.15));
-
     for (let i = 0; i < lines.length; i++) {
       const sp = document.createElementNS("http://www.w3.org/2000/svg", "tspan");
       sp.setAttribute("x", `${x}`);
@@ -805,15 +878,13 @@ export class Visual implements IVisual {
       sp.textContent = lines[i];
       t.appendChild(sp);
     }
-
     g.appendChild(t);
   }
 
   // ----------------------------
   // SVG helpers
   // ----------------------------
-
-  private poly(g: SVGGElement, pts: Pt[], fill: string, s: any): void {
+  private poly(g: SVGGElement, pts: Pt[], fill: string, s: BuildingSettings): void {
     const p = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
     p.setAttribute("points", pts.map(d => `${d.x},${d.y}`).join(" "));
     p.setAttribute("fill", fill);
@@ -841,7 +912,13 @@ export class Visual implements IVisual {
 
       const serializer = new XMLSerializer();
       const svgXml = serializer.serializeToString(this.lastSvg);
-      await this.downloadService.exportVisualsContent(svgXml, "DataCenterMockup.xml", "xml", "Data center mockup (SVG as XML)");
+
+      await this.downloadService.exportVisualsContent(
+        svgXml,
+        "DataCenterMockup.xml",
+        "xml",
+        "Data center mockup (SVG as XML)"
+      );
     } catch {
       // ignore
     }
@@ -852,6 +929,7 @@ export class Visual implements IVisual {
     const r = parseInt(c.substring(0, 2), 16);
     const gg = parseInt(c.substring(2, 4), 16);
     const b = parseInt(c.substring(4, 6), 16);
+
     const mix = (v: number) => Math.round(v + (255 - v) * Math.min(0.6, t * 0.6));
     return `rgb(${mix(r)}, ${mix(gg)}, ${mix(b)})`;
   }
@@ -860,7 +938,6 @@ export class Visual implements IVisual {
 // ----------------------------
 // Geometry + math helpers
 // ----------------------------
-
 function quadPoint(TL: Pt, TR: Pt, BR: Pt, BL: Pt, u: number, v: number): Pt {
   const x =
     TL.x * (1 - u) * (1 - v) +
